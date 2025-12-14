@@ -314,19 +314,30 @@ ORDER BY t.household_key, t.DAY"""
                     col_param, col_info = st.columns([2, 1])
                     
                     with col_param:
-                        # Sampling option for large datasets
                         total_rows = len(st.session_state.data)
-                        if total_rows > 20000:
-                            st.warning(f"⚠️ Dataset besar ({total_rows:,} transaksi). Sampling direkomendasikan untuk performa cepat.")
-                            use_sampling = st.checkbox("🚀 Gunakan Sampling (lebih cepat)", value=True)
-                            if use_sampling:
-                                sample_size = st.slider("Jumlah sampel transaksi", 10000, min(total_rows, 50000), 20000, 5000,
-                                    help="20K sampel biasanya cukup untuk pola yang representatif dengan waktu ~10 detik.")
-                            else:
-                                sample_size = total_rows
+                        st.caption(f"Total keranjang tersedia: **{total_rows:,}**")
+                        default_sampling = total_rows > 20000
+                        use_sampling = st.checkbox(
+                            "🚀 Aktifkan Random Sampling",
+                            value=default_sampling,
+                            help="Gunakan subset acak untuk mempercepat proses tanpa menghitung seluruh transaksi."
+                        )
+
+                        if use_sampling:
+                            sample_ratio = st.slider(
+                                "Proporsi Sampel",
+                                min_value=0.05,
+                                max_value=1.0,
+                                value=0.25 if total_rows > 20000 else 0.5,
+                                step=0.05,
+                                format="%.2f",
+                                help="0.25 berarti hanya 25% keranjang yang dianalisis."
+                            )
+                            sample_size = min(total_rows, max(1000, int(total_rows * sample_ratio)))
+                            st.info(f"📉 Analisis akan menggunakan {sample_size:,} keranjang (dari {total_rows:,}).")
                         else:
-                            use_sampling = False
                             sample_size = total_rows
+                            st.success("📊 Menggunakan seluruh keranjang tanpa sampling.")
                         
                         min_support_val = st.slider("Minimum Support", 0.001, 0.1, 0.01, 0.001, format="%.3f",
                             help="Persentase minimum kemunculan itemset.")
@@ -2449,27 +2460,6 @@ FROM products p
 JOIN transactions t ON p.PRODUCT_ID = t.PRODUCT_ID
 GROUP BY p.DEPARTMENT
 ORDER BY revenue DESC""",
-                "Campaign Performance": """
-SELECT 
-    c.CAMPAIGN,
-    c.DESCRIPTION,
-    COUNT(DISTINCT ct.household_key) as targeted,
-    COUNT(DISTINCT cr.household_key) as redeemed,
-    ROUND(COUNT(DISTINCT cr.household_key) * 100.0 / 
-          NULLIF(COUNT(DISTINCT ct.household_key), 0), 1) as redemption_rate
-FROM campaigns c
-LEFT JOIN campaign_targets ct ON c.CAMPAIGN = ct.CAMPAIGN
-LEFT JOIN coupon_redemptions cr ON c.CAMPAIGN = cr.CAMPAIGN
-GROUP BY c.CAMPAIGN
-ORDER BY redemption_rate DESC""",
-                "Coupon Effectiveness": """
-SELECT 
-    camp.DESCRIPTION as campaign_type,
-    COUNT(DISTINCT cr.household_key) as unique_redeemers,
-    COUNT(cr.id) as total_redemptions
-FROM coupon_redemptions cr
-JOIN campaigns camp ON cr.CAMPAIGN = camp.CAMPAIGN
-GROUP BY camp.DESCRIPTION"""
             }
             
             selected_example = st.selectbox("📝 Contoh Query:", list(example_queries.keys()))
@@ -2522,26 +2512,14 @@ GROUP BY camp.DESCRIPTION"""
                 graph [bgcolor="transparent", pad=0.5, nodesep=0.8, ranksep=1.2];
                 
                 // Tables as nodes with key columns
-                campaigns [label="{📊 campaigns|CAMPAIGN (PK)\\lDESCRIPTION\\lSTART_DAY\\lEND_DAY\\l}", fillcolor="#dbeafe"];
-                
-                campaign_targets [label="{🎯 campaign_targets|id (PK)\\lCAMPAIGN (FK)\\lhousehold_key (FK)\\l}", fillcolor="#fef3c7"];
-                
                 customers [label="{👥 customers|household_key (PK)\\lAGE_DESC\\lMARITAL_STATUS_CODE\\lINCOME_DESC\\lHOMEOWNER_DESC\\lHH_COMP_DESC\\lHOUSEHOLD_SIZE_DESC\\lKID_CATEGORY_DESC\\lphone_number\\l}", fillcolor="#d1fae5"];
-                
-                coupon_redemptions [label="{✅ coupon_redemptions|id (PK)\\lhousehold_key (FK)\\lDAY\\lCOUPON_UPC\\lCAMPAIGN (FK)\\l}", fillcolor="#fee2e2"];
                 
                 products [label="{📦 products|PRODUCT_ID (PK)\\lMANUFACTURER\\lDEPARTMENT\\lBRAND\\lCOMMODITY_DESC\\lSUB_COMMODITY_DESC\\lCURR_SIZE_OF_PRODUCT\\l}", fillcolor="#e0e7ff"];
                 
-                transactions [label="{💳 transactions|id (PK)\\lhousehold_key (FK)\\lBASKET_ID\\lDAY\\lPRODUCT_ID (FK)\\lQUANTITY\\lSALES_VALUE\\lSTORE_ID\\lRETAIL_DISC\\lCOUPON_DISC\\lCOUPON_MATCH_DISC\\l}", fillcolor="#fce7f3"];
+                transactions [label="{💳 transactions|household_key (FK)\\lBASKET_ID\\lDAY\\lPRODUCT_ID (FK)\\lQUANTITY\\lSALES_VALUE\\lSTORE_ID\\lRETAIL_DISC\\lCOUPON_DISC\\lCOUPON_MATCH_DISC\\l}", fillcolor="#fce7f3"];
                 
                 // Relationships with labels
-                campaigns -> campaign_targets [label="1:N\\nCAMPAIGN", style=bold, color="#2563eb"];
-                campaigns -> coupon_redemptions [label="1:N\\nCAMPAIGN", style=bold, color="#2563eb"];
-                
-                campaign_targets -> customers [label="N:1\\nhousehold_key", style=bold, color="#059669"];
-                
                 customers -> transactions [label="1:N\\nhousehold_key", style=bold, color="#059669"];
-                customers -> coupon_redemptions [label="1:N\\nhousehold_key", style=bold, color="#059669"];
                 
                 products -> transactions [label="1:N\\nPRODUCT_ID", style=bold, color="#7c3aed"];
             }
@@ -2553,7 +2531,6 @@ GROUP BY camp.DESCRIPTION"""
             st.markdown("""
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 10px;">
                 <strong>📌 Legend:</strong><br>
-                <span style="color: #2563eb;">━━ Blue</span>: Campaign relationships &nbsp;&nbsp;
                 <span style="color: #059669;">━━ Green</span>: Customer relationships &nbsp;&nbsp;
                 <span style="color: #7c3aed;">━━ Purple</span>: Product relationships<br><br>
                 <strong>Keys:</strong> PK = Primary Key, FK = Foreign Key
@@ -2583,11 +2560,7 @@ GROUP BY camp.DESCRIPTION"""
             st.markdown("### 🔗 Relationship Summary")
             
             relationships = [
-                {"From Table": "campaigns", "To Table": "campaign_targets", "Join Key": "CAMPAIGN", "Type": "1:N"},
-                {"From Table": "campaigns", "To Table": "coupon_redemptions", "Join Key": "CAMPAIGN", "Type": "1:N"},
-                {"From Table": "customers", "To Table": "campaign_targets", "Join Key": "household_key", "Type": "1:N"},
                 {"From Table": "customers", "To Table": "transactions", "Join Key": "household_key", "Type": "1:N"},
-                {"From Table": "customers", "To Table": "coupon_redemptions", "Join Key": "household_key", "Type": "1:N"},
                 {"From Table": "products", "To Table": "transactions", "Join Key": "PRODUCT_ID", "Type": "1:N"},
             ]
             

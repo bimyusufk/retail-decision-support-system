@@ -1,7 +1,11 @@
 # database.py
-"""
-SQLite Database Module for Retail Decision Support System
-Simplified version for reduced dataset (197 customers, 89K products, 399K transactions)
+"""database.py
+
+SQLite Database Module for Retail Decision Support System.
+
+- datasets/hh_demographics.csv  -> customers
+- datasets/product.csv          -> products
+- datasets/transaction_data.csv -> transactions
 """
 
 import sqlite3
@@ -18,25 +22,11 @@ ARCHIVED_PATH = Path(__file__).parent / "datasets"
 # DATABASE SCHEMA
 # =============================================================================
 
-SCHEMA = """
--- Campaigns Master Table
-CREATE TABLE IF NOT EXISTS campaigns (
-    CAMPAIGN INTEGER PRIMARY KEY,
-    DESCRIPTION TEXT,
-    START_DAY INTEGER,
-    END_DAY INTEGER
-);
+# Note: We keep table definitions mainly for documentation and basic integrity.
+# During load, pandas `to_sql(..., if_exists='replace')` will replace table
+# definitions (dropping constraints). We recreate indexes after loading.
 
--- Campaign Targeting (which households received which campaigns)
-CREATE TABLE IF NOT EXISTS campaign_targets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    DESCRIPTION TEXT,
-    household_key INTEGER,
-    CAMPAIGN INTEGER,
-    FOREIGN KEY (CAMPAIGN) REFERENCES campaigns(CAMPAIGN),
-    FOREIGN KEY (household_key) REFERENCES customers(household_key)
-);
-
+TABLE_SCHEMA = """
 -- Customers (Household Demographics)
 CREATE TABLE IF NOT EXISTS customers (
     household_key INTEGER PRIMARY KEY,
@@ -61,20 +51,8 @@ CREATE TABLE IF NOT EXISTS products (
     CURR_SIZE_OF_PRODUCT TEXT
 );
 
--- Coupon Redemptions
-CREATE TABLE IF NOT EXISTS coupon_redemptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    household_key INTEGER,
-    DAY INTEGER,
-    COUPON_UPC INTEGER,
-    CAMPAIGN INTEGER,
-    FOREIGN KEY (household_key) REFERENCES customers(household_key),
-    FOREIGN KEY (CAMPAIGN) REFERENCES campaigns(CAMPAIGN)
-);
-
 -- Transactions (main sales data)
 CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     household_key INTEGER,
     BASKET_ID INTEGER,
     DAY INTEGER,
@@ -86,11 +64,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     TRANS_TIME INTEGER,
     WEEK_NO INTEGER,
     COUPON_DISC REAL,
-    COUPON_MATCH_DISC REAL,
-    FOREIGN KEY (household_key) REFERENCES customers(household_key),
-    FOREIGN KEY (PRODUCT_ID) REFERENCES products(PRODUCT_ID)
+    COUPON_MATCH_DISC REAL
 );
+"""
 
+INDEX_SCHEMA = """
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_transactions_household ON transactions(household_key);
 CREATE INDEX IF NOT EXISTS idx_transactions_product ON transactions(PRODUCT_ID);
@@ -111,10 +89,16 @@ def get_connection():
 def initialize_database():
     """Create database schema (tables and indexes)."""
     conn = get_connection()
-    conn.executescript(SCHEMA)
+    conn.executescript(TABLE_SCHEMA)
+    conn.executescript(INDEX_SCHEMA)
     conn.commit()
     conn.close()
     return True
+
+
+def create_indexes(conn: sqlite3.Connection) -> None:
+    """(Re)create indexes after loading/replacing tables."""
+    conn.executescript(INDEX_SCHEMA)
 
 def database_exists():
     """Check if database file exists."""
@@ -141,16 +125,6 @@ def load_customers(conn):
     df.to_sql('customers', conn, if_exists='replace', index=False)
     return len(df), None
 
-def load_campaigns(conn):
-    """Load campaign_desc.csv into campaigns table."""
-    file_path = ARCHIVED_PATH / "campaign_desc.csv"
-    if not file_path.exists():
-        return 0, "File not found: campaign_desc.csv"
-    
-    df = pd.read_csv(file_path)
-    df.to_sql('campaigns', conn, if_exists='replace', index=False)
-    return len(df), None
-
 def load_products(conn):
     """Load product.csv into products table."""
     file_path = ARCHIVED_PATH / "product.csv"
@@ -159,30 +133,6 @@ def load_products(conn):
     
     df = pd.read_csv(file_path)
     df.to_sql('products', conn, if_exists='replace', index=False)
-    return len(df), None
-
-def load_campaign_targets(conn, valid_households=None):
-    """Load campaign_table.csv into campaign_targets table."""
-    file_path = ARCHIVED_PATH / "campaign_table.csv"
-    if not file_path.exists():
-        return 0, "File not found: campaign_table.csv"
-    
-    df = pd.read_csv(file_path)
-    if valid_households:
-        df = df[df['household_key'].isin(valid_households)]
-    df.to_sql('campaign_targets', conn, if_exists='replace', index=False)
-    return len(df), None
-
-def load_coupon_redemptions(conn, valid_households=None):
-    """Load coupon_redempt.csv into coupon_redemptions table."""
-    file_path = ARCHIVED_PATH / "coupon_redempt.csv"
-    if not file_path.exists():
-        return 0, "File not found: coupon_redempt.csv"
-    
-    df = pd.read_csv(file_path)
-    if valid_households:
-        df = df[df['household_key'].isin(valid_households)]
-    df.to_sql('coupon_redemptions', conn, if_exists='replace', index=False)
     return len(df), None
 
 def load_transactions(conn, valid_households=None, progress_callback=None):
@@ -224,44 +174,26 @@ def load_all_data(progress_callback=None):
             cursor.execute("SELECT household_key FROM customers")
             valid_households = set(row[0] for row in cursor.fetchall())
         
-        # 2. Load campaigns
-        if progress_callback:
-            progress_callback(0.2, "Loading campaigns...")
-        count, err = load_campaigns(conn)
-        summary['campaigns'] = {'count': count, 'error': err}
-        
-        # 3. Load products
+        # 2. Load products
         if progress_callback:
             progress_callback(0.3, "Loading products...")
         count, err = load_products(conn)
         summary['products'] = {'count': count, 'error': err}
-        
-        # 4. Load campaign targets
-        if progress_callback:
-            progress_callback(0.4, "Loading campaign targets...")
-        count, err = load_campaign_targets(conn, valid_households)
-        summary['campaign_targets'] = {'count': count, 'error': err}
-        
-        # 5. Load coupon redemptions
-        if progress_callback:
-            progress_callback(0.5, "Loading coupon redemptions...")
-        count, err = load_coupon_redemptions(conn, valid_households)
-        summary['coupon_redemptions'] = {'count': count, 'error': err}
-        
-        # 6. Load transactions
+
+        # 3. Load transactions
         def tx_progress(pct, msg):
             if progress_callback:
-                progress_callback(0.6 + pct * 0.3, msg)
-        
+                progress_callback(0.45 + pct * 0.45, msg)
+
         count, err = load_transactions(conn, valid_households, tx_progress)
         summary['transactions'] = {'count': count, 'error': err}
-        
-        # 7. Create indexes
+
+        # 4. Create indexes
         if progress_callback:
             progress_callback(0.95, "Creating indexes...")
-        conn.executescript(SCHEMA)
+        create_indexes(conn)
         conn.commit()
-        
+
         if progress_callback:
             progress_callback(1.0, "Complete!")
         
@@ -340,26 +272,6 @@ def get_customer_summary(household_key):
     """
     return execute_query(query, (household_key,))
 
-def get_campaign_performance():
-    """Get campaign performance metrics."""
-    query = """
-    SELECT 
-        c.CAMPAIGN,
-        c.DESCRIPTION as campaign_type,
-        c.START_DAY,
-        c.END_DAY,
-        COUNT(DISTINCT ct.household_key) as targeted_customers,
-        COUNT(DISTINCT cr.household_key) as redeeming_customers,
-        COUNT(cr.COUPON_UPC) as total_redemptions,
-        ROUND(COUNT(DISTINCT cr.household_key) * 100.0 / NULLIF(COUNT(DISTINCT ct.household_key), 0), 2) as redemption_rate
-    FROM campaigns c
-    LEFT JOIN campaign_targets ct ON c.CAMPAIGN = ct.CAMPAIGN
-    LEFT JOIN coupon_redemptions cr ON c.CAMPAIGN = cr.CAMPAIGN
-    GROUP BY c.CAMPAIGN
-    ORDER BY redemption_rate DESC
-    """
-    return execute_query(query)
-
 def get_product_performance(limit=50):
     """Get top performing products by revenue."""
     query = f"""
@@ -416,20 +328,6 @@ def get_department_sales():
     JOIN transactions t ON p.PRODUCT_ID = t.PRODUCT_ID
     GROUP BY p.DEPARTMENT
     ORDER BY total_revenue DESC
-    """
-    return execute_query(query)
-
-def get_coupon_effectiveness():
-    """Analyze coupon effectiveness by campaign type."""
-    query = """
-    SELECT 
-        camp.DESCRIPTION as campaign_type,
-        COUNT(DISTINCT cr.household_key) as unique_redeemers,
-        COUNT(cr.id) as total_redemptions,
-        ROUND(COUNT(cr.id) * 1.0 / COUNT(DISTINCT cr.household_key), 2) as redemptions_per_customer
-    FROM coupon_redemptions cr
-    JOIN campaigns camp ON cr.CAMPAIGN = camp.CAMPAIGN
-    GROUP BY camp.DESCRIPTION
     """
     return execute_query(query)
 

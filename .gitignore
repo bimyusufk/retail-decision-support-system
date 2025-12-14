@@ -11,3 +11,6 @@ datasets/retail.db
 datasets/transaction_data.csv
 datasets/product.csv
 datasets/hh_demographics.csv
+
+# Mengabaikan report
+report/

@@ -260,6 +260,25 @@ Kustomisasi fitur demografis mana yang akan dimasukkan dalam training model:
 
 ---
 
+## 🤝 Kontribusi
+
+Kontribusi sangat diterima! Silakan ajukan Pull Request.
+
+---
+
+## 📄 Lisensi
+
+Proyek ini untuk tujuan edukasi.
+
+---
+
+## 👤 Penulis
+
+**Bim Yusuf K**
+
+- GitHub: [@bimyusufk](https://github.com/bimyusufk)
+
+---
 
 ## 🙏 Ucapan Terima Kasih
 
