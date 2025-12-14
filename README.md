@@ -107,7 +107,7 @@ Unduh file dataset dari Google Drive:
 
 ### Langkah 2: Tempatkan File di Folder `datasets/`
 
-Setelah mengunduh, tempatkan file-file berikut di folder `datasets/`:
+Setelah mengunduh, tempatkan `transaction_data.csv`, `hh_demographics.csv`, dan `product.csv`  di folder `datasets/`:
 
 ```
 retail-decision-support-system/
@@ -125,14 +125,6 @@ retail-decision-support-system/
 2. Navigasi ke menu **Database**
 3. Klik **"🚀 Buat Database dari CSV"** untuk membuat database SQLite
 4. Tunggu proses import selesai (~1-2 menit tergantung spesifikasi hardware)
-
-### Alternatif: Unduh Database Langsung
-
-Jika tersedia, Anda dapat mengunduh database yang sudah jadi langsung:
-
-🔗 **[Unduh retail.db](https://drive.google.com/file/YOUR_DB_FILE_ID)**
-
-Tempatkan `retail.db` di folder `datasets/` dan lewati Langkah 3.
 
 ---
 
@@ -268,25 +260,6 @@ Kustomisasi fitur demografis mana yang akan dimasukkan dalam training model:
 
 ---
 
-## 🤝 Kontribusi
-
-Kontribusi sangat diterima! Silakan ajukan Pull Request.
-
----
-
-## 📄 Lisensi
-
-Proyek ini untuk tujuan edukasi.
-
----
-
-## 👤 Penulis
-
-**Bim Yusuf K**
-
-- GitHub: [@bimyusufk](https://github.com/bimyusufk)
-
----
 
 ## 🙏 Ucapan Terima Kasih
 
