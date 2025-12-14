@@ -101,9 +101,8 @@ Dataset **tidak disertakan** dalam repository ini karena keterbatasan ukuran fil
 
 Unduh file dataset dari Google Drive:
 
-🔗 **[Unduh Dataset](https://drive.google.com/drive/folders/YOUR_FOLDER_ID_HERE)**
+🔗 **[Unduh Dataset](https://drive.google.com/file/d/1l_dZ-H-xspLgyfAH5ZIU7hlLhGuXtbFQ/view?usp=sharing)**
 
-<!-- Ganti YOUR_FOLDER_ID_HERE dengan link Google Drive folder Anda yang sebenarnya -->
 
 ### Langkah 2: Tempatkan File di Folder `datasets/`
 
